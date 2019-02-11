@@ -55,7 +55,7 @@ namespace WaveLabAgent.Test
             PopulateProcedure(ref procedure);
 
             //Act
-            mock.GetProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
+            mock.LoadProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
             //Assert
             Assert.Equal(procedure.Name, procedure.Name);
         }
@@ -69,7 +69,7 @@ namespace WaveLabAgent.Test
             PopulateProcedure(ref procedure);
 
             //Act
-            mock.GetProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
+            mock.LoadProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
             //Assert
             Assert.Equal(procedure.Name, procedure.Name);
         }
@@ -82,7 +82,7 @@ namespace WaveLabAgent.Test
             var procedure = mock.GetProcedure(item.Code);
             PopulateProcedure(ref procedure);
             //Act
-            mock.GetProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
+            mock.LoadProcedureFiles(procedure, @"D:\WiM\GitHub\WaveLabServices\WaveLabAgent.Test\temp");
             //Assert
             Assert.Equal(procedure.Name, procedure.Name);
         }

@@ -9,7 +9,7 @@ namespace WaveLabServices.Resources
 {
     public class Upload
     {
-        IFormFileCollection Files {get;set;}
+        ICollection<IFormFile> Files {get;set;}
         Procedure Procedure { get; set; }
     }
 }

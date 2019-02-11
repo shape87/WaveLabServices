@@ -11,6 +11,7 @@ using WiM.Services.Analytics;
 using WiM.Utilities.ServiceAgent;
 using WiM.Services.Resources;
 using WaveLabServices.Filters;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace WaveLabServices
 {
@@ -35,6 +36,9 @@ namespace WaveLabServices
         //Method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            // Angular's default header name for sending the XSRF token.
+            services.AddAntiforgery(options => options.HeaderName = "X-XSRF-TOKEN");
+
             //add functionality to inject IOptions<T>
             services.AddOptions();
             //Configure injectable obj
@@ -51,6 +55,12 @@ namespace WaveLabServices
                                                                  .AllowAnyMethod()
                                                                  .AllowAnyHeader()
                                                                  .AllowCredentials());
+            });
+            services.Configure<FormOptions>(x =>
+            {
+                x.ValueLengthLimit = int.MaxValue;
+                x.MultipartBodyLengthLimit = int.MaxValue;
+                x.MultipartHeadersLengthLimit = int.MaxValue;
             });
 
             services.AddMvc(options => { options.RespectBrowserAcceptHeader = true;

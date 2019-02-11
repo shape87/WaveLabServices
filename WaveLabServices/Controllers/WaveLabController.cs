@@ -20,14 +20,26 @@
 
 using Microsoft.AspNetCore.Mvc;
 using System;
+using System.Text;
 using WaveLabAgent;
-using WaveLabServices.Resources;
+using WaveLabServices.Filters;
+using WaveLabServices.Resources.Helpers;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using WiM.Resources;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Net.Http.Headers;
 using Microsoft.AspNetCore.Hosting;
 using System.Linq;
+using System.IO;
+using WaveLabAgent.Resources;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using WaveLabServices.Resources;
+using System.Globalization;
+using Newtonsoft.Json;
+using WIM.Exceptions.Services;
 
 namespace WaveLabServices.Controllers
 {
@@ -36,6 +48,7 @@ namespace WaveLabServices.Controllers
     {
         public IWaveLabAgent agent { get; set; }
         private IHostingEnvironment _hostingEnvironment;
+        private static readonly FormOptions _defaultFormOptions = new FormOptions();
         public WaveLabController(IWaveLabAgent agent, IHostingEnvironment hostingEnvironment ) : base()
         {
             this.agent = agent;
@@ -69,28 +82,35 @@ namespace WaveLabServices.Controllers
                 return HandleException(ex);
             }
         }
-        [HttpPost()]
-        public async Task<IActionResult> Execute(Upload items)
+        [HttpPost]
+        [DisableFormValueModelBinding]
+        [DisableRequestSizeLimit]
+        //[ValidateAntiForgeryToken]
+        public async Task<IActionResult> Execute()
         {
-            //https://docs.microsoft.com/en-us/aspnet/core/mvc/models/file-uploads?view=aspnetcore-2.2
-            //https://www.google.com/search?rlz=1C1GCEA_en&ei=YuJdXJKuH4mk0wL32YXgCQ&q=dotnet+core+2.2+IEnumerable+IFormFile&oq=dotnet+core+2.2+IEnumerable+IFormFile&gs_l=psy-ab.3...4522.16761..17279...1.0..0.264.2912.0j18j1......0....1..gws-wiz.......0i22i30j0j0i13j0i13i30.oLzztIHM0Fw
-
+            string targetFilePath = null;
             try
             {
+                if (String.IsNullOrEmpty(targetFilePath))
+                    targetFilePath = Path.Combine(_hostingEnvironment.ContentRootPath, "wwwtemp", Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
+                if (!Directory.Exists(targetFilePath))
+                    Directory.CreateDirectory(targetFilePath);
 
-                //if (!isValid(entity)) return new BadRequestResult();
-                //create temp folder
-                var workingdirectory = "";
+                Procedure item = await this.ProcessProcedureRequestAsync(targetFilePath);
+                agent.LoadProcedureFiles(item, targetFilePath);
 
-                //deserialize files to directory
-                //agent.GetProcedureFiles(entity, workingdirectory);
-
-                //serialize result files from directory and return
                 return Ok();
             }
             catch (Exception ex)
             {
                 return await HandleExceptionAsync(ex);
+            }
+            finally
+            {
+                if (Directory.Exists(targetFilePath))
+                {
+                    Directory.Delete(targetFilePath, true);
+                }
             }
         }
         #endregion
@@ -99,6 +119,112 @@ namespace WaveLabServices.Controllers
         {
             if (messages.Count < 1) return;
             HttpContext.Items[WiM.Services.Middleware.X_MessagesExtensions.msgKey] = messages;
+        }
+        private async Task<Procedure> ProcessProcedureRequestAsync(string targetPath)
+        {
+            try
+            {
+                Procedure result = null;
+                if (!MultipartRequestHelper.IsMultipartContentType(Request.ContentType))
+                    throw new BadRequestException($"Expected a multipart request, but got {Request.ContentType}");
+
+
+                // Used to accumulate all the form url encoded key value pairs in the 
+                // request.
+                var formAccumulator = new KeyValueAccumulator();
+
+                var boundary = MultipartRequestHelper.GetBoundary(MediaTypeHeaderValue.Parse(Request.ContentType),
+                                                                   _defaultFormOptions.MultipartBoundaryLengthLimit);
+
+                var reader = new MultipartReader(boundary, HttpContext.Request.Body);
+                var section = await reader.ReadNextSectionAsync();
+
+                while (section != null)
+                {
+                    ContentDispositionHeaderValue contentDisposition;
+                    var hasContentDispositionHeader = ContentDispositionHeaderValue.TryParse(section.ContentDisposition, out contentDisposition);
+
+                    if (hasContentDispositionHeader)
+                    {
+                        if (MultipartRequestHelper.HasFileContentDisposition(contentDisposition))
+                        {
+                            if (section.ContentType == "application/json")
+                            {
+                                var serializer = new JsonSerializer();
+
+                                using (var sr = new StreamReader(section.Body))
+                                using (var jsonTextReader = new JsonTextReader(sr))
+                                    result = serializer.Deserialize<Procedure>(jsonTextReader);
+
+                            }
+                            else // is file
+                            {
+                                using (var targetStream = new FileStream(Path.Combine(targetPath, contentDisposition.FileName.ToString()), FileMode.Create))
+                                    await section.Body.CopyToAsync(targetStream);
+
+                            }//end if
+                        }//end if
+                        else if (MultipartRequestHelper.HasFormDataContentDisposition(contentDisposition))
+                        {
+                            // Content-Disposition: form-data; name="key"
+                            // Do not limit the key name length here because the 
+                            // multipart headers length limit is already in effect.
+                            var key = HeaderUtilities.RemoveQuotes(contentDisposition.Name);
+                            using (var streamReader = new StreamReader(section.Body, GetEncoding(section),
+                                detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true))
+                            {
+                                // The value length limit is enforced by MultipartBodyLengthLimit
+                                var value = await streamReader.ReadToEndAsync();
+                                if (String.Equals(value, "undefined", StringComparison.OrdinalIgnoreCase))
+                                    value = String.Empty;
+
+                                formAccumulator.Append(key.ToString(), value);
+
+                                if (formAccumulator.ValueCount > _defaultFormOptions.ValueCountLimit)
+                                    throw new InvalidDataException($"Form key count limit {_defaultFormOptions.ValueCountLimit} exceeded.");
+
+                            }//end using
+                        }//endif
+                    }
+                    // Drains any remaining section body that has not been consumed and
+                    // reads the headers for the next section.
+                    section = await reader.ReadNextSectionAsync();
+                }//next
+                if (formAccumulator.HasValues)
+                {
+                    // Bind form data to a model
+                    result = new Procedure();
+                    var formValueProvider = new FormValueProvider(
+                        BindingSource.Form,
+                        new FormCollection(formAccumulator.GetResults()),
+                        CultureInfo.CurrentCulture);
+
+                    var bindingSuccessful = await TryUpdateModelAsync(result, prefix: "",
+                        valueProvider: formValueProvider);
+                    if (!bindingSuccessful)
+                        if (!ModelState.IsValid)
+                            throw new BadRequestException(ModelState.ValidationState.ToString());
+
+                }//end if
+                return result;
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+        }
+        private static Encoding GetEncoding(MultipartSection section)
+        {
+            MediaTypeHeaderValue mediaType;
+            var hasMediaTypeHeader = MediaTypeHeaderValue.TryParse(section.ContentType, out mediaType);
+            // UTF-7 is insecure and should not be honored. UTF-8 will succeed in 
+            // most cases.
+            if (!hasMediaTypeHeader || Encoding.UTF7.Equals(mediaType.Encoding))
+            {
+                return Encoding.UTF8;
+            }
+            return mediaType.Encoding;
         }
         #endregion
     }

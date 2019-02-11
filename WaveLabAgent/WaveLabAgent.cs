@@ -37,7 +37,7 @@ namespace WaveLabAgent
     {
         List<Procedure> GetAvailableProcedures();
         Procedure GetProcedure(string CodeOrID);
-        void GetProcedureFiles(Procedure selectedprocedure,string workingdirectory);
+        void LoadProcedureFiles(Procedure selectedprocedure,string workingdirectory);
 
     }
 
@@ -87,7 +87,7 @@ namespace WaveLabAgent
             return procedure;
         }
 
-        public void GetProcedureFiles(Procedure selectedprocedure,string workingdirectory)
+        public void LoadProcedureFiles(Procedure selectedprocedure,string workingdirectory)
         {
             if (!isValid(selectedprocedure)) throw new BadRequestException("One or more of the procedure's configuration options are invalid");
             execute(selectedprocedure, workingdirectory);
