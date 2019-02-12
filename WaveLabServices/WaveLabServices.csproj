@@ -5,6 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="wwwtemp\**" />
+    <Content Remove="wwwtemp\**" />
+    <EmbeddedResource Remove="wwwtemp\**" />
+    <None Remove="wwwtemp\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="Controllers\Configuration2Controller.cs" />
   </ItemGroup>
 
@@ -21,10 +28,6 @@
     <None Update="Assets\Scripts\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-  </ItemGroup>
-  
-    <ItemGroup>
-    <Folder Include="wwwtemp\" />
   </ItemGroup>
   
   <ItemGroup>

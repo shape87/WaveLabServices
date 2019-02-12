@@ -37,7 +37,7 @@ namespace WaveLabServices.Test
             var id = 1;
 
             //Act
-            var response = await controller.Get();
+            var response = controller.Get();
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(response);

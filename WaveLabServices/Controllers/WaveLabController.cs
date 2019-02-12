@@ -40,6 +40,7 @@ using WaveLabServices.Resources;
 using System.Globalization;
 using Newtonsoft.Json;
 using WIM.Exceptions.Services;
+using System.IO.Compression;
 
 namespace WaveLabServices.Controllers
 {
@@ -56,7 +57,7 @@ namespace WaveLabServices.Controllers
         }
         #region METHODS
         [HttpGet()]
-        public async Task<IActionResult> Get()
+        public IActionResult Get()
         {
             //returns list of available Navigations
             try
@@ -69,7 +70,7 @@ namespace WaveLabServices.Controllers
             }
         }
         [HttpGet("{codeOrID}")]
-        public async Task<IActionResult> Get(string codeOrID)
+        public IActionResult Get(string codeOrID)
         {
             //returns list of available Navigations
             try
@@ -98,8 +99,8 @@ namespace WaveLabServices.Controllers
 
                 Procedure item = await this.ProcessProcedureRequestAsync(targetFilePath);
                 agent.LoadProcedureFiles(item, targetFilePath);
-
-                return Ok();
+                
+                return Ok(await getResultZipFiles(targetFilePath));
             }
             catch (Exception ex)
             {
@@ -109,7 +110,7 @@ namespace WaveLabServices.Controllers
             {
                 if (Directory.Exists(targetFilePath))
                 {
-                    Directory.Delete(targetFilePath, true);
+                    //Directory.Delete(targetFilePath, true);
                 }
             }
         }
@@ -214,6 +215,65 @@ namespace WaveLabServices.Controllers
                 throw;
             }
         }
+        private MultipartResult getResultFiles(string targetFilePath)
+        {
+            //this does not work - jkn (02/12/2019)
+
+            //method adapted from https://github.com/aspnet/Mvc/issues/4933
+            //other download methods https://www.c-sharpcorner.com/blogs/crud-operations-and-upload-download-files-in-asp-net-core-20
+            try
+            {
+                MultipartResult result = new MultipartResult();
+                foreach (string file in Directory.EnumerateFiles(targetFilePath))
+                {                    
+                    result.Add(new MultipartContent()
+                    {
+                        ContentType = GetContentType(file),
+                        FileName = Path.GetFileName(file),
+                        Stream = this.OpenFile(file)
+                    });
+                }//next file              
+
+                return result;
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+        private async Task<FileCallbackResult> getResultZipFiles(string targetFilePath)
+        {
+            try
+            {
+                return new FileCallbackResult(new MediaTypeHeaderValue("application/octet-stream"), async (outputStream, _) =>
+                {
+                    using (var zipArchive = new ZipArchive(new WriteOnlyStreamWrapper(outputStream), ZipArchiveMode.Create))
+                    {
+                        foreach (string file in Directory.EnumerateFiles(targetFilePath))
+                        {
+                            var zipEntry = zipArchive.CreateEntry(Path.GetFileName(file));
+                            using (var zipStream = zipEntry.Open())
+                                await OpenFile(file).CopyToAsync(zipStream);
+                        }
+                    }
+                })
+                {
+                    FileDownloadName = "MyZipfile.zip"
+                };
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }            
+        }
+        private Stream OpenFile(string file)
+        {
+            return System.IO.File.Open(
+                    file,
+                    FileMode.Open,
+                    FileAccess.Read);
+        }
         private static Encoding GetEncoding(MultipartSection section)
         {
             MediaTypeHeaderValue mediaType;
@@ -225,6 +285,29 @@ namespace WaveLabServices.Controllers
                 return Encoding.UTF8;
             }
             return mediaType.Encoding;
+        }
+        private string GetContentType(string fileName)
+        {
+            //https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Complete_list_of_MIME_types
+            var ext = Path.GetExtension(fileName);
+            switch (ext.ToLower())
+            {
+                case ".txt": return "text/plain";
+                case ".pdf": return "application/pdf";
+                case ".doc": case ".docx": return "application/vnd.ms-word";
+                case ".xls": return "application/vnd.ms-excel";
+                case ".xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                case ".png": return "image/png";
+                case ".jpg": case ".jpeg": return "image/jpeg";
+                case ".gif": return "image/gif";
+                case ".csv": return "text/csv";
+                case ".json": return "application/json";
+                case ".html": return "text/html";
+                case ".js": return "application/javascript";
+                case ".zip": return "application/zip";
+                case ".7zip": return "application/x-7z-compressed";
+                default:return "application/octet-stream";
+            }            
         }
         #endregion
     }
