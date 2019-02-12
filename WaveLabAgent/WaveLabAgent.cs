@@ -37,7 +37,7 @@ namespace WaveLabAgent
     {
         List<Procedure> GetAvailableProcedures();
         Procedure GetProcedure(string CodeOrID);
-        void LoadProcedureFiles(Procedure selectedprocedure,string workingdirectory);
+        string GetProcedureResultsFilePath(Procedure selectedprocedure,string workingdirectory);
 
     }
 
@@ -87,10 +87,22 @@ namespace WaveLabAgent
             return procedure;
         }
 
-        public void LoadProcedureFiles(Procedure selectedprocedure,string workingdirectory)
+        public string GetProcedureResultsFilePath(Procedure selectedprocedure,string workingdirectory)
         {
-            if (!isValid(selectedprocedure)) throw new BadRequestException("One or more of the procedure's configuration options are invalid");
-            execute(selectedprocedure, workingdirectory);
+            try
+            {
+                var resultspath = Path.Combine(workingdirectory, "wavelabResults");
+                if (!Directory.Exists(resultspath))
+                    Directory.CreateDirectory(resultspath);
+
+                if (!isValid(selectedprocedure)) throw new BadRequestException("One or more of the procedure's configuration options are invalid");
+                execute(selectedprocedure, resultspath);
+                return resultspath;
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
         }
         #endregion
         #region HELPER METHODS
@@ -239,6 +251,8 @@ namespace WaveLabAgent
                 foreach (int identifier in procedureConfigurations[procedureCode])
                 {
                     var item = options.Find(o => o.ID == identifier);
+                    //input files up one directory level
+                    if (item.ID == 1) item.Value = Path.Combine("..", item.Value);
                     if (item.Required && item.Value == null) throw new BadRequestException(item.Name+" is required.");
                     if (item.Value == null) item.Value = getOptionsDefaultValue(procedureCode, item.ID);
                     arguments.AddRange(getOptionValue(item));

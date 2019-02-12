@@ -87,7 +87,7 @@ namespace WaveLabServices.Controllers
         [DisableFormValueModelBinding]
         [DisableRequestSizeLimit]
         //[ValidateAntiForgeryToken]
-        public async Task<IActionResult> Execute()
+        public async Task<IActionResult> Execute([FromQuery]string format="")
         {
             string targetFilePath = null;
             try
@@ -96,11 +96,12 @@ namespace WaveLabServices.Controllers
                     targetFilePath = Path.Combine(_hostingEnvironment.ContentRootPath, "wwwtemp", Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
                 if (!Directory.Exists(targetFilePath))
                     Directory.CreateDirectory(targetFilePath);
-
+                    
                 Procedure item = await this.ProcessProcedureRequestAsync(targetFilePath);
-                agent.LoadProcedureFiles(item, targetFilePath);
-                
-                return Ok(await getResultZipFiles(targetFilePath));
+                string resultsFilePath = agent.GetProcedureResultsFilePath(item, targetFilePath);
+
+                if (format.Contains("zip")) return getResultZipFiles(resultsFilePath);
+                else return getResultFiles(resultsFilePath);
             }
             catch (Exception ex)
             {
@@ -241,27 +242,26 @@ namespace WaveLabServices.Controllers
                 throw;
             }
         }
-        private async Task<FileCallbackResult> getResultZipFiles(string targetFilePath)
+        private FileResult getResultZipFiles(string resultFilePath)
         {
             try
             {
-                return new FileCallbackResult(new MediaTypeHeaderValue("application/octet-stream"), async (outputStream, _) =>
+                const string contentType = "application/zip";
+
+                var zipFile = Path.Combine(Directory.GetParent(resultFilePath).FullName, "wavelab.zip");
+
+                //ZipFile.CreateFromDirectory(resultFilePath, zipFile);
+                //var stream = _hostingEnvironment.ContentRootFileProvider
+                //    .GetFileInfo(zipFile).CreateReadStream();
+                //return new FileStreamResult(stream, contentType);
+
+                var result = new FileContentResult(System.IO.File.ReadAllBytes(zipFile), contentType)
                 {
-                    using (var zipArchive = new ZipArchive(new WriteOnlyStreamWrapper(outputStream), ZipArchiveMode.Create))
-                    {
-                        foreach (string file in Directory.EnumerateFiles(targetFilePath))
-                        {
-                            var zipEntry = zipArchive.CreateEntry(Path.GetFileName(file));
-                            using (var zipStream = zipEntry.Open())
-                                await OpenFile(file).CopyToAsync(zipStream);
-                        }
-                    }
-                })
-                {
-                    FileDownloadName = "MyZipfile.zip"
+                    FileDownloadName = Path.GetFileName(zipFile)
                 };
+                return result;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
 
                 throw;

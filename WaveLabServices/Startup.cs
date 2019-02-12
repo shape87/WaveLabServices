@@ -65,7 +65,8 @@ namespace WaveLabServices
 
             services.AddMvc(options => { options.RespectBrowserAcceptHeader = true;
                 options.Filters.Add(new WaveLabHypermedia());})                               
-                                .AddJsonOptions(options => loadJsonOptions(options));                                
+                                .AddJsonOptions(options => loadJsonOptions(options));  
+                                
                                 
         }     
 
