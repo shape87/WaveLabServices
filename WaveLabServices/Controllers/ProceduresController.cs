@@ -41,16 +41,17 @@ using System.Globalization;
 using Newtonsoft.Json;
 using WIM.Exceptions.Services;
 using System.IO.Compression;
+using Newtonsoft.Json.Linq;
 
 namespace WaveLabServices.Controllers
 {
     [Route("[controller]")]
-    public class WaveLabController : WiM.Services.Controllers.ControllerBase
+    public class ProceduresController : WiM.Services.Controllers.ControllerBase
     {
         public IWaveLabAgent agent { get; set; }
         private IHostingEnvironment _hostingEnvironment;
         private static readonly FormOptions _defaultFormOptions = new FormOptions();
-        public WaveLabController(IWaveLabAgent agent, IHostingEnvironment hostingEnvironment ) : base()
+        public ProceduresController(IWaveLabAgent agent, IHostingEnvironment hostingEnvironment ) : base()
         {
             this.agent = agent;
             this._hostingEnvironment = hostingEnvironment;
@@ -90,13 +91,16 @@ namespace WaveLabServices.Controllers
         public async Task<IActionResult> Execute([FromQuery]string format="")
         {
             string targetFilePath = null;
+            string tempdir = Path.Combine(_hostingEnvironment.ContentRootPath, "wwwtemp");
             try
             {
+                
                 if (String.IsNullOrEmpty(targetFilePath))
-                    targetFilePath = Path.Combine(_hostingEnvironment.ContentRootPath, "wwwtemp", Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
+                    targetFilePath = Path.Combine(tempdir, Path.GetFileNameWithoutExtension(Path.GetRandomFileName()));
                 if (!Directory.Exists(targetFilePath))
                     Directory.CreateDirectory(targetFilePath);
-                    
+                
+
                 Procedure item = await this.ProcessProcedureRequestAsync(targetFilePath);
                 string resultsFilePath = agent.GetProcedureResultsFilePath(item, targetFilePath);
 
@@ -109,10 +113,8 @@ namespace WaveLabServices.Controllers
             }
             finally
             {
-                if (Directory.Exists(targetFilePath))
-                {
-                    //Directory.Delete(targetFilePath, true);
-                }
+                //sets path key to delete once finished
+                cleanup(tempdir);
             }
         }
         #endregion
@@ -179,12 +181,16 @@ namespace WaveLabServices.Controllers
                                 var value = await streamReader.ReadToEndAsync();
                                 if (String.Equals(value, "undefined", StringComparison.OrdinalIgnoreCase))
                                     value = String.Empty;
+                                if (isJson(value)) {
+                                    result = JsonConvert.DeserializeObject<Procedure>(value);
+                                }
+                                else
+                                {
+                                    formAccumulator.Append(key.ToString(), value);
 
-                                formAccumulator.Append(key.ToString(), value);
-
-                                if (formAccumulator.ValueCount > _defaultFormOptions.ValueCountLimit)
-                                    throw new InvalidDataException($"Form key count limit {_defaultFormOptions.ValueCountLimit} exceeded.");
-
+                                    if (formAccumulator.ValueCount > _defaultFormOptions.ValueCountLimit)
+                                        throw new InvalidDataException($"Form key count limit {_defaultFormOptions.ValueCountLimit} exceeded.");
+                                }
                             }//end using
                         }//endif
                     }
@@ -222,11 +228,12 @@ namespace WaveLabServices.Controllers
 
             //method adapted from https://github.com/aspnet/Mvc/issues/4933
             //other download methods https://www.c-sharpcorner.com/blogs/crud-operations-and-upload-download-files-in-asp-net-core-20
+
             try
             {
                 MultipartResult result = new MultipartResult();
                 foreach (string file in Directory.EnumerateFiles(targetFilePath))
-                {                    
+                {
                     result.Add(new MultipartContent()
                     {
                         ContentType = GetContentType(file),
@@ -242,6 +249,7 @@ namespace WaveLabServices.Controllers
                 throw;
             }
         }
+
         private FileResult getResultZipFiles(string resultFilePath)
         {
             try
@@ -250,7 +258,7 @@ namespace WaveLabServices.Controllers
 
                 var zipFile = Path.Combine(Directory.GetParent(resultFilePath).FullName, "wavelab.zip");
 
-                //ZipFile.CreateFromDirectory(resultFilePath, zipFile);
+                ZipFile.CreateFromDirectory(resultFilePath, zipFile);
                 //var stream = _hostingEnvironment.ContentRootFileProvider
                 //    .GetFileInfo(zipFile).CreateReadStream();
                 //return new FileStreamResult(stream, contentType);
@@ -308,6 +316,20 @@ namespace WaveLabServices.Controllers
                 case ".7zip": return "application/x-7z-compressed";
                 default:return "application/octet-stream";
             }            
+        }
+        private bool isJson(string input)
+        {
+            input = input.Trim();
+            return input.StartsWith("{") && input.EndsWith("}")
+                   || input.StartsWith("[") && input.EndsWith("]");
+        }
+        private void cleanup(string path)
+        {
+            foreach (var dir in new DirectoryInfo(path).EnumerateDirectories())
+                //deletes directories older than 30 min
+                if (dir.LastWriteTime < DateTime.Now.AddMinutes(-30))
+                     Directory.Delete(dir.FullName, true);
+             
         }
         #endregion
     }

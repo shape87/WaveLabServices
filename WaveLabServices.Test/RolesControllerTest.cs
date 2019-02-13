@@ -22,10 +22,10 @@ namespace WaveLabServices.Test
 {
     public class WaveLabTest
     {
-        public WaveLabController controller { get; private set; }
+        public ProceduresController controller { get; private set; }
         public WaveLabTest() {
             //Arrange
-            controller = new WaveLabController(new InMemoryWaveLabAgent());
+            controller = new ProceduresController(new InMemoryWaveLabAgent());
             //must set explicitly for tests to work
             controller.ObjectValidator = new InMemoryModelValidator();
         }

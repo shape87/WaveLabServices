@@ -77,7 +77,6 @@ namespace WaveLabServices
             app.UseCors("CorsPolicy");
             app.Use_Analytics();
             app.UseX_Messages();
-
             app.UseMvc();            
         }
 
