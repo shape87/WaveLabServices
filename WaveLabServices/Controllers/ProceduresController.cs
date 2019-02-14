@@ -46,7 +46,7 @@ using Newtonsoft.Json.Linq;
 namespace WaveLabServices.Controllers
 {
     [Route("[controller]")]
-    public class ProceduresController : WiM.Services.Controllers.ControllerBase
+    public class ProceduresController : WaveLabControllerBase
     {
         public IWaveLabAgent agent { get; set; }
         private IHostingEnvironment _hostingEnvironment;
@@ -119,11 +119,6 @@ namespace WaveLabServices.Controllers
         }
         #endregion
         #region HELPER METHODS
-        private void sm(List<Message> messages)
-        {
-            if (messages.Count < 1) return;
-            HttpContext.Items[WiM.Services.Middleware.X_MessagesExtensions.msgKey] = messages;
-        }
         private async Task<Procedure> ProcessProcedureRequestAsync(string targetPath)
         {
             try

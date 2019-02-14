@@ -55,8 +55,8 @@ namespace WaveLabAgent
         {
             wavelabresources = ProcedureSettings.Value.wavelab.resources;
             //deep clone to ensure objects stay stateless
-            //availableProcedures = JsonConvert.DeserializeObject<List<Procedure>>(JsonConvert.SerializeObject(ProcedureSettings.Value.Procedures));
-            availableProcedures = ProcedureSettings.Value.Procedures;
+            availableProcedures = JsonConvert.DeserializeObject<List<Procedure>>(JsonConvert.SerializeObject(ProcedureSettings.Value.Procedures));
+            //availableProcedures = ProcedureSettings.Value.Procedures;
             procedureConfigurations = ProcedureSettings.Value.ProcedureConfigurations;
             availableConfigurationOptions = ProcedureSettings.Value.Configurations;
             
@@ -81,8 +81,8 @@ namespace WaveLabAgent
         {
             var procedure = availableProcedures.FirstOrDefault(n => String.Equals(n.ID.ToString(), procedureIdentifier, StringComparison.OrdinalIgnoreCase)
                             || String.Equals(n.Code.Trim(), procedureIdentifier.Trim(), StringComparison.OrdinalIgnoreCase));
-
-
+          
+            if (procedure == null) throw new WIM.Exceptions.Services.NotFoundRequestException($"procedure with identifier {procedureIdentifier} cannot be found");
             procedure.Configuration = getProcedureConfigurations(procedure.Code);
             return procedure;
         }
